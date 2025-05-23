@@ -17,15 +17,13 @@ command_exists() {
   command -v "$1" >/dev/null 2>&1
 }
 
-# Check for doas or sudo
-if command_exists doas; then
-  SUDO="doas"
-elif command_exists sudo; then
-  SUDO="sudo"
-else
-  echo "Error: Neither doas nor sudo is available. Install one first."
+# Ensure sudo is available
+if ! command_exists sudo; then
+  echo "Error: sudo is not available. Please install sudo and try again."
   exit 1
 fi
+
+SUDO="sudo"
 
 # Function to install a package if not already installed
 install_pkg() {
@@ -49,23 +47,19 @@ enable_service() {
 
 # Setup additional repositories if needed
 setup_repos() {
-  # Check if nonfree repo is needed (for proprietary drivers, Chrome, etc.)
   if lspci | grep -i nvidia >/dev/null 2>&1; then
     echo "NVIDIA GPU detected, adding nonfree repository..."
     install_pkg void-repo-nonfree
     install_pkg nvidia
   else
-    # Still add nonfree for Chrome, etc.
     install_pkg void-repo-nonfree
   fi
 
-  # Add multilib if on x86_64
   if [ "$(uname -m)" = "x86_64" ]; then
     echo "Adding multilib repository for 64-bit system..."
     install_pkg void-repo-multilib
   fi
 
-  # Sync repositories
   $SUDO xbps-install -S
 }
 
@@ -76,7 +70,6 @@ build_dwl() {
   git clone https://github.com/djpohly/dwl.git
   cd dwl
   
-  # Copy custom config if it exists in our repo
   if [ -f ~/void-dwl-setup/configs/dwl/config.h ]; then
     cp ~/void-dwl-setup/configs/dwl/config.h .
   fi
@@ -89,20 +82,9 @@ build_dwl() {
 # Function to install dwl-specific scripts
 install_dwl_scripts() {
   mkdir -p ~/.local/bin
-  
-  # Script to get dwl tags for waybar
   cat > ~/.local/bin/dwl-tags.sh << 'EOF'
 #!/bin/sh
-# Get dwl tags for waybar
-# Requires: jq
-
-get_dwl_tags() {
-  # This is a placeholder - you would need a more complex implementation
-  # to actually communicate with dwl
-  echo '[{"name":"1","state":"focused"},{"name":"2","state":"inactive"}]'
-}
-
-get_dwl_tags
+echo '[{"name":"1","state":"focused"},{"name":"2","state":"inactive"}]'
 EOF
   chmod +x ~/.local/bin/dwl-tags.sh
 }
@@ -110,22 +92,14 @@ EOF
 # Function to copy and adapt configs
 setup_configs() {
   echo "Setting up configuration files..."
-  
-  # Create necessary config directories
-  mkdir -p ~/.config/waybar
-  mkdir -p ~/.config/wofi
-  mkdir -p ~/.config/alacritty
-  mkdir -p ~/.config/dwl
-  
-  # Copy and adapt waybar config if it exists
+  mkdir -p ~/.config/waybar ~/.config/wofi ~/.config/alacritty ~/.config/dwl
+
   if [ -d ~/void-dwl-setup/configs/waybar ]; then
-    # Adapt Sway-specific modules for dwl
     if [ -f ~/void-dwl-setup/configs/waybar/config ]; then
       sed -e 's/"sway\/workspaces"/{"custom\/dwl-tags"}/' \
           -e 's/"sway\/mode"//' \
           ~/void-dwl-setup/configs/waybar/config > ~/.config/waybar/config
-      
-      # Add custom module for dwl tags if not already present
+
       if ! grep -q "custom/dwl-tags" ~/.config/waybar/config; then
         cat >> ~/.config/waybar/config << 'EOF'
     "custom/dwl-tags": {
@@ -137,30 +111,18 @@ setup_configs() {
 EOF
       fi
     fi
-    
-    # Copy waybar style
+
     cp -r ~/void-dwl-setup/configs/waybar/style.css ~/.config/waybar/ 2>/dev/null || true
   fi
-  
-  # Copy other configs that don't need modification
-  if [ -d ~/void-dwl-setup/configs/wofi ]; then
-    cp -r ~/void-dwl-setup/configs/wofi/* ~/.config/wofi/ 2>/dev/null || true
-  fi
-  
-  if [ -d ~/void-dwl-setup/configs/alacritty ]; then
-    cp -r ~/void-dwl-setup/configs/alacritty/* ~/.config/alacritty/ 2>/dev/null || true
-  fi
-  
-  # Setup greetd to use dwl instead of sway
+
+  [ -d ~/void-dwl-setup/configs/wofi ] && cp -r ~/void-dwl-setup/configs/wofi/* ~/.config/wofi/ 2>/dev/null || true
+  [ -d ~/void-dwl-setup/configs/alacritty ] && cp -r ~/void-dwl-setup/configs/alacritty/* ~/.config/alacritty/ 2>/dev/null || true
+
   if [ -d ~/void-dwl-setup/configs/greetd ]; then
     if [ -f ~/void-dwl-setup/configs/greetd/config.toml ]; then
-      # Replace sway with dwl in the greetd config
       sed 's/command = ".*sway.*"/command = "tuigreet --cmd dwl"/' \
           ~/void-dwl-setup/configs/greetd/config.toml > /tmp/config.toml
-      $SUDO mv /tmp/config.toml /etc/greetd/config.toml
-      $SUDO chmod 644 /etc/greetd/config.toml
     else
-      # Create new greetd config
       cat > /tmp/config.toml << EOF
 [terminal]
 vt = 1
@@ -169,14 +131,14 @@ vt = 1
 command = "tuigreet --cmd dwl"
 user = "greeter"
 EOF
-      $SUDO mv /tmp/config.toml /etc/greetd/config.toml
-      $SUDO chmod 644 /etc/greetd/config.toml
     fi
+    $SUDO mv /tmp/config.toml /etc/greetd/config.toml
+    $SUDO chmod 644 /etc/greetd/config.toml
   fi
-  
-  # Set up environment variables for Wayland/dwl
-  if [ ! -f ~/.bash_profile ] || ! grep -q "XDG_CURRENT_DESKTOP=dwl" ~/.bash_profile; then
-    cat >> ~/.bash_profile << 'EOF'
+
+  for file in ~/.bash_profile ~/.zprofile; do
+    if [ ! -f "$file" ] || ! grep -q "XDG_CURRENT_DESKTOP=dwl" "$file"; then
+      cat >> "$file" << 'EOF'
 
 # Wayland/dwl environment variables
 export XDG_CURRENT_DESKTOP=dwl
@@ -185,29 +147,15 @@ export QT_QPA_PLATFORM=wayland
 export QT_WAYLAND_DISABLE_WINDOWDECORATION=1
 export GDK_BACKEND=wayland
 EOF
-  fi
-  
-  if [ ! -f ~/.zprofile ] || ! grep -q "XDG_CURRENT_DESKTOP=dwl" ~/.zprofile; then
-    cat >> ~/.zprofile << 'EOF'
-
-# Wayland/dwl environment variables
-export XDG_CURRENT_DESKTOP=dwl
-export MOZ_ENABLE_WAYLAND=1
-export QT_QPA_PLATFORM=wayland
-export QT_WAYLAND_DISABLE_WINDOWDECORATION=1
-export GDK_BACKEND=wayland
-EOF
-  fi
+    fi
+  done
 }
 
 # Begin main script
 echo "=== Starting Void Linux + dwl Installation ==="
 check_void
-
-# Get username
 USERNAME=$(whoami)
 
-# Setup repositories
 echo "=== Setting up repositories ==="
 setup_repos
 
@@ -216,10 +164,7 @@ for pkg in xdg-desktop-portal-wlr dbus polkit seatd acpi chrony; do
   install_pkg "$pkg"
 done
 
-# Add user to _seatd group
 $SUDO usermod -a -G _seatd "$USERNAME"
-
-# Enable essential services
 enable_service dbus
 enable_service seatd
 enable_service chronyd
@@ -230,11 +175,9 @@ for pkg in libX11-devel libXft-devel libXinerama-devel wayland-protocols wayland
 done
 
 echo "=== Installing Window System ==="
-# First try to install from repos
 if xbps-query -Rs dwl >/dev/null 2>&1; then
   install_pkg dwl
 else
-  # If not in repos, try to build from source
   install_pkg git
   install_pkg base-devel
   build_dwl
@@ -244,10 +187,7 @@ for pkg in greetd tuigreet waybar wofi wl-clipboard mako swaylock swayidle; do
   install_pkg "$pkg"
 done
 
-# Install dwl-specific scripts
 install_dwl_scripts
-
-# Enable greetd
 enable_service greetd
 
 echo "=== Installing Terminal & Tools ==="
@@ -267,14 +207,8 @@ done
 
 echo "=== Installing Browsers & Communication ==="
 install_pkg chromium
-# For Google Chrome specifically
 if xbps-query -S void-repo-nonfree >/dev/null 2>&1; then
-  if [ ! -e "/usr/bin/google-chrome" ]; then
-    echo "Installing Google Chrome..."
-    install_pkg google-chrome
-  else
-    echo "Google Chrome already installed, skipping."
-  fi
+  [ ! -e "/usr/bin/google-chrome" ] && install_pkg google-chrome || echo "Google Chrome already installed, skipping."
 fi
 
 echo "=== Installing File Management ==="
@@ -292,17 +226,12 @@ for pkg in git flatpak vscodium micro gcc make; do
   install_pkg "$pkg"
 done
 
-# Set up Flatpak
 install_pkg flatpak
 flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
 
 echo "=== Installing Flatpak Applications ==="
 for app in md.obsidian.Obsidian net.ankiweb.Anki com.discordapp.Discord us.zoom.Zoom; do
-  if ! flatpak list | grep -q "$app"; then
-    flatpak install -y flathub "$app"
-  else
-    echo "$app already installed via Flatpak, skipping."
-  fi
+  flatpak list | grep -q "$app" || flatpak install -y flathub "$app"
 done
 
 echo "=== Installing Networking ==="
@@ -316,7 +245,6 @@ install_pkg tlp
 install_pkg rsync
 enable_service tlp
 
-# Copy and adapt configs from existing repository
 setup_configs
 
 echo "=== Installation Complete! ==="
@@ -339,6 +267,6 @@ For issues with your setup, check:
 - Log messages: tail -f /var/log/messages
 
 You may need to reboot your system to ensure all services start properly:
-  doas reboot
+  sudo reboot
 
 EOF
