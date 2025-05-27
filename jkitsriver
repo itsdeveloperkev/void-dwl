@@ -1,0 +1,48 @@
+#!/bin/sh
+# --- Dynamic GPU Handling ---
+# Check for NVIDIA GPU (card1) and connected 180Hz display
+if [ -e /dev/dri/card1 ]; then
+  for output in $(wlr-randr --list | awk '/^[a-zA-Z]+-[0-9]+/{print $1}'); do
+    if wlr-randr --output "$output" --list-modes | grep -q '1920x1080@\(180\|180\.00\)Hz'; then
+      export WLR_DRM_DEVICES=/dev/dri/card1
+      wlr-randr --output "$output" --custom-mode "1920x1080@180.00Hz"
+      break
+    fi
+  done
+else
+  export WLR_DRM_DEVICES=/dev/dri/card0
+fi
+
+# --- Keybindings ---
+riverctl map normal Super Return spawn foot
+riverctl map normal Super D spawn wofi --show drun
+riverctl map normal Super+Shift Q close
+riverctl map normal Super H focus-view left
+riverctl map normal Super L focus-view right
+riverctl map normal Super K focus-view up
+riverctl map normal Super J focus-view down
+riverctl map normal Super+Shift H move-view left
+riverctl map normal Super+Shift L move-view right
+riverctl map normal Super+Shift K move-view up
+riverctl map normal Super+Shift J move-view down
+riverctl map normal Super Space toggle-float
+riverctl map normal Super F toggle-fullscreen
+riverctl map normal Super+Shift C spawn micro ~/.config/river/init.sh
+riverctl map normal Super+Shift R spawn riverctl exit
+
+# --- Startup Applications ---
+swaybg -i /usr/share/void-artwork/void-logo.png -m fill &
+waybar &
+mako &
+nm-applet --indicator &
+blueman-applet &
+
+# --- Layout Management ---
+riverctl default-layout rivertile
+rivertile -view-padding 6 -outer-padding 6 &
+
+# --- Focus Behavior ---
+riverctl focus-follows-cursor normal
+
+# --- Execute River ---
+exec river
