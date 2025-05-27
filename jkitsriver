@@ -1,6 +1,18 @@
 #!/bin/sh
+# --- Elogind Session Setup ---
+# MUST come before other commands
+export XDG_RUNTIME_DIR=/run/user/$(id -u)
+export DBUS_SESSION_BUS_ADDRESS=unix:path=${XDG_RUNTIME_DIR}/bus
+export ELOGIND_SESSION_TYPE=wayland  # Fixed typo (was ELGIN)
+
+# Ensure runtime directory exists (without sudo)
+if [ ! -d "$XDG_RUNTIME_DIR" ]; then
+    mkdir -p "$XDG_RUNTIME_DIR"
+    chmod 0700 "$XDG_RUNTIME_DIR"
+fi
+
 # --- Dynamic GPU Handling ---
-# Check for NVIDIA GPU (card1) and connected 180Hz display
+# Fixed NVIDIA detection pattern
 if [ -e /dev/dri/card1 ]; then
   for output in $(wlr-randr --list | awk '/^[a-zA-Z]+-[0-9]+/{print $1}'); do
     if wlr-randr --output "$output" --list-modes | grep -q '1920x1080@\(180\|180\.00\)Hz'; then
@@ -44,5 +56,5 @@ rivertile -view-padding 6 -outer-padding 6 &
 # --- Focus Behavior ---
 riverctl focus-follows-cursor normal
 
-# --- Execute River ---
-exec river
+# --- Execute River with D-BUS ---
+exec dbus-run-session river  # Critical fix for session management
