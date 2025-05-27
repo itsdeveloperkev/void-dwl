@@ -1,6 +1,9 @@
 #!/bin/sh
-# --- Elogind Session Setup ---
-# MUST come before other commands
+# Force Intel GPU
+export WLR_DRM_DEVICES=/dev/dri/card0
+export LIBSEAT_BACKEND=logind
+
+# Elogind session setup
 export XDG_RUNTIME_DIR=/run/user/$(id -u)
 export DBUS_SESSION_BUS_ADDRESS=unix:path=${XDG_RUNTIME_DIR}/bus
 export ELOGIND_SESSION_TYPE=wayland  # Fixed typo (was ELGIN)
