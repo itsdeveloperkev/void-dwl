@@ -1,0 +1,17 @@
+{
+    "layer": "top",
+    "modules-left": ["river/tags", "custom/nvidia"],
+    "modules-center": ["clock"],
+    "modules-right": ["network", "battery", "pulseaudio"],
+    
+    "custom/nvidia": {
+        "exec": "if [ -e /dev/dri/card1 ]; then echo ''; fi",
+        "interval": 30
+    },
+    
+    "river/tags": {"num-tags": 9},
+    "clock": {"format": "{:%Y-%m-%d %H:%M}"},
+    "network": {"format-wifi": " {signalStrength}%"},
+    "battery": {"format": " {capacity}%"},
+    "pulseaudio": {"format": " {volume}%"}
+}
